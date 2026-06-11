@@ -1,0 +1,21 @@
+---
+# OpenTelemetry Core Version Variables
+otel_version: "0.152.0"
+
+# Map Ansible's detected architecture to OpenTelemetry's asset naming
+# Note: ansible_architecture returns values like 'x86_64', 'aarch64', etc.
+otel_arch_map:
+  x86_64: "amd64"
+  amd64: "amd64"
+  aarch64: "arm64"
+  arm64: "arm64"
+
+# Dynamically select the correct architecture string
+# Using ansible_architecture variable (still works, but in future use ansible_facts['architecture'])
+otel_arch: "{{ otel_arch_map[ansible_architecture] | default('amd64') }}"
+
+otel_config_dir: "/etc/otelcol-contrib"
+otel_config_file: "config.yaml"
+
+# Corrected Contrib distribution URL matching GitHub asset specifications
+otel_download_url: "https://github.com/open-telemetry/opentelemetry-collector-releases/releases/download/v{{ otel_version }}/otelcol-contrib_{{ otel_version }}_linux_{{ otel_arch }}.{{ otel_pkg_type }}"

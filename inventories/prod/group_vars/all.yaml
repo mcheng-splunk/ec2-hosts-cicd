@@ -1,0 +1,11 @@
+---
+env_stage: "prod"
+
+# Only used when activating teardown.ym with -limit option
+# ansible-playbook -i inventories/dev/ teardown.yml --limit db_machines --ask-vault-pass
+otel_version: "0.152.0"
+otel_config_dir: "/etc/otelcol-contrib"
+
+# HAProxy Load Balancer Endpoint (used by otel_agent config)
+# This should point to the HAProxy server's IP:port
+haproxy_endpoint: "{{ hostvars[groups['otel_lb'][0]]['ansible_host'] }}:4317"

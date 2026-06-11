@@ -1,0 +1,12 @@
+---
+# Combined teardown playbook - removes all OTel components
+# This playbook calls the individual teardown playbooks for each tier
+
+- name: Import all teardown playbooks
+  ansible.builtin.import_playbook: teardown_agents.yml
+
+- name: Import collector teardown
+  ansible.builtin.import_playbook: teardown_collectors.yml
+
+- name: Import load balancer teardown
+  ansible.builtin.import_playbook: teardown_lb.yml

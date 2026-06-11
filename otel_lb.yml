@@ -1,0 +1,6 @@
+---
+- name: Configure HAProxy Load Balancer
+  hosts: haproxy_otel_lb
+  become: true
+  roles:
+    - haproxy_otel_lb

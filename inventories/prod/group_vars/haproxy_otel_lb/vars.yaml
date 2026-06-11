@@ -1,0 +1,7 @@
+---
+# HAProxy Load Balancer Variables
+otel_lb_endpoint: "{{ ansible_host }}:4317"
+# Backend OTel Collector endpoint (where HAProxy forwards traffic)
+otel_collector_backend_endpoint: "{{ hostvars[groups['otel_collector'][0]]['ansible_host'] | default('otel-collector') }}:4317"
+# Final OTel backend (where otel_collectors export data)
+otel_backend_endpoint: "{{ otel_collector_backend_endpoint }}"

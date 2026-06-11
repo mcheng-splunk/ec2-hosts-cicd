@@ -1,0 +1,5 @@
+---
+- import_playbook: webservers.yml
+- import_playbook: db_machines.yml
+- import_playbook: otel_collector.yml
+- import_playbook: otel_lb.yml

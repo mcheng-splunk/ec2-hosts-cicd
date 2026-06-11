@@ -1,0 +1,70 @@
+receivers:
+  otlp:
+    protocols:
+      grpc:
+      http:
+  hostmetrics:
+    collection_interval: 10s
+    scrapers:
+      cpu:
+      memory:
+      load:
+# ==========================================
+  # Dynamic Database Receivers Matrix
+  # ==========================================
+{% if db_type == 'postgres' %}
+  postgresql:
+    endpoint: localhost:{{ otel_metrics_port }}
+    username: otel_monitor
+    password: "{{ vault_db_password }}"  # <--- Safely injected via Vault resolution
+    tls:
+      insecure: true
+{% elif db_type == 'mysql' %}
+  mysql:
+    endpoint: localhost:{{ otel_metrics_port }}
+    username: otel_monitor
+    password: "{{ vault_db_password }}"  # <--- Safely injected via Vault resolution
+{% elif db_type == 'mssql' %}
+  sqlserver:
+    endpoint: "sqlserver://localhost:{{ otel_metrics_port }}"
+    username: otel_monitor
+    password: "{{ vault_db_password }}"  # <--- Safely injected via Vault resolution
+{% elif db_type == 'oracle' %}
+  oracledb:
+    endpoint: "localhost:{{ otel_metrics_port }}/XEPDB1"
+    username: otel_monitor
+    password: "{{ vault_db_password }}"  # <--- Safely injected via Vault resolution
+{% endif %}
+
+processors:
+  batch:
+
+  memory_limiter:
+    check_interval: 2s
+    limit_mib: 512
+
+exporters:
+  debug:
+    verbosity: detailed
+  otlp:
+    endpoint: {{ haproxy_endpoint | default('otel-lb.company.com:4317') }}
+    tls:
+      insecure: true
+
+service:
+  pipelines:
+    metrics:
+      # Automatically swaps the active receiver based on the db_type variable
+      receivers: [otlp, hostmetrics{% if db_type == 'postgres' %}, postgresql{% elif db_type == 'mysql' %}, mysql{% elif db_type == 'mssql' %}, sqlserver{% elif db_type == 'oracle' %}, oracledb{% endif %}]
+      processors: [batch, memory_limiter]
+      exporters: [otlp, debug]
+
+    logs:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [otlp, debug]
+
+    traces:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [otlp, debug]

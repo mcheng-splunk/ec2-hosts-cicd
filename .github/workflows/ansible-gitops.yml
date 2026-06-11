@@ -1,0 +1,164 @@
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'inventories/**'
+      - 'roles/**'
+      - '*.yml'
+      - '.github/workflows/*.yml'
+
+  workflow_dispatch:
+    inputs:
+      target_env:
+        description: 'Select Target Environment Scope'
+        required: true
+        default: 'dev'
+        type: choice
+        options:
+          - dev
+          - test
+          - prod
+      target_tier:
+        description: 'Select Infrastructure Tier to Deploy'
+        required: true
+        default: 'db_machines'
+        type: choice
+        options:
+          - db_machines
+          - webservers
+          - otel_collector
+          - haproxy_otel_lb
+          - ALL
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v6
+
+      - name: Install System Dependencies
+        run: |
+          sudo apt-get update && sudo apt-get install -y git python3 python3-pip openssh-client ansible
+
+      - name: Install OpenTelemetry Python Packages
+        run: |
+          # Install OTel packages to system Python with ignore-installed to skip conflicts
+          sudo python3 -m pip install --ignore-installed --upgrade opentelemetry-api opentelemetry-sdk opentelemetry-exporter-otlp-proto-grpc
+          # Verify in system Python
+          python3 -c "from opentelemetry import trace; print('OTel module loaded successfully in system Python')"
+          # Install to Ansible Python too (pipx venv)
+          ANSIBLE_PYTHON=$(ansible-playbook --version 2>&1 | grep "python version" | sed 's/.*(\(.*\))/\1/' | tr -d '()')
+          $ANSIBLE_PYTHON -m pip install --ignore-installed --upgrade opentelemetry-api opentelemetry-sdk opentelemetry-exporter-otlp-proto-grpc
+          $ANSIBLE_PYTHON -c "from opentelemetry import trace; print('OTel module loaded successfully in Ansible Python')"
+
+      - name: Debug Python Environment
+        run: |
+          echo "=== Python Debug ==="
+          echo "Python: $(python3 --version)"
+          echo "Python executable: $(which python3)"
+
+          echo ""
+          echo "=== Ansible Debug ==="
+          which ansible-playbook
+          ansible-playbook --version
+
+          echo ""
+          echo "=== Test OTel in system Python ==="
+          python3 -c "from opentelemetry import trace; print('OTel import in python3 OK')"
+
+          echo ""
+          echo "=== Test OTel in Ansible Python (IMPORTANT) ==="
+          ANSIBLE_PYTHON=$(ansible-playbook --version 2>&1 | grep "python version" | sed 's/.*(\(.*\))/\1/' | tr -d '()')
+          echo "Detected Ansible Python: $ANSIBLE_PYTHON"
+
+          $ANSIBLE_PYTHON -c "from opentelemetry import trace; print('OTel import in Ansible Python OK')"
+
+      - name: Configure SSH & Vault Keys
+        run: |
+          mkdir -p ~/.ssh
+          # Change 'id_rsa' to 'aws-id-rsa.pem' to match what your Ansible variables expect
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/aws-id-rsa.pem
+          chmod 600 ~/.ssh/aws-id-rsa.pem
+
+          echo "${{ secrets.ANSIBLE_VAULT_PASSWORD }}" > .vault_pass.txt
+          chmod 600 .vault_pass.txt
+
+      # =================================================================
+      # FOLDER DETECTION APPROACH (Alternative to dropdown selection)
+      # Uncomment this block to enable automatic environment detection
+      # based on which folder (dev/test/prod) was modified in the git push.
+      # =================================================================
+      - name: Parse Environment via Folder Detection
+        id: parse-matrix
+        run: |
+          # Get the list of changed files from the push event
+          echo "Fetching changed files..."
+          curl -s https://api.github.com/repos/${{ github.repository }}/commits/${{ github.sha }} | jq -r '.files[].filename' > /tmp/changed_files.txt 2>/dev/null || echo "" > /tmp/changed_files.txt
+      
+          ENV_CHOICE="dev"  # default
+          if grep -q "inventories/test" /tmp/changed_files.txt 2>/dev/null; then
+            ENV_CHOICE="test"
+            echo "Detected environment: test (from folder detection)"
+          elif grep -q "inventories/prod" /tmp/changed_files.txt 2>/dev/null; then
+            ENV_CHOICE="prod"
+            echo "Detected environment: prod (from folder detection)"
+          elif grep -q "inventories/dev" /tmp/changed_files.txt 2>/dev/null; then
+            ENV_CHOICE="dev"
+            echo "Detected environment: dev (from folder detection)"
+          else
+            echo "No environment folder changes detected, defaulting to dev"
+          fi
+      
+          # Detect tier based on playbook file changes
+          TIER_CHOICE="db_machines"  # default
+          if grep -q "webservers.yml" /tmp/changed_files.txt 2>/dev/null; then
+            TIER_CHOICE="webservers"
+          elif grep -q "otel_collector.yml" /tmp/changed_files.txt 2>/dev/null; then
+            TIER_CHOICE="otel_collector"
+          elif grep -q "loadbalancer.yml" /tmp/changed_files.txt 2>/dev/null; then
+            TIER_CHOICE="haproxy_otel_lb"
+          elif grep -q "site.yml" /tmp/changed_files.txt 2>/dev/null; then
+            TIER_CHOICE="ALL"
+          fi
+      
+          echo "inventory_path=inventories/$ENV_CHOICE/" >> $GITHUB_OUTPUT
+          echo "playbook_file=$TIER_CHOICE.yml" >> $GITHUB_OUTPUT
+
+      # =================================================================
+      # DROPDOWN SELECTION APPROACH (Default - Active)
+      # Keep this block active for manual environment selection via workflow_dispatch
+      # =================================================================
+      - name: Parse Environment and Playbook Selections
+        id: parse-matrix
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            ENV_CHOICE="${{ github.event.inputs.target_env }}"
+            TIER_CHOICE="${{ github.event.inputs.target_tier }}"
+          else
+            ENV_CHOICE="dev"
+            TIER_CHOICE="db_machines"
+            echo "Automated git push hook triggered. Defaulting to DEV environment deployment."
+          fi
+
+          if [ "$TIER_CHOICE" = "db_machines" ]; then
+            PLAYBOOK_FILE="db_machines.yml"
+          elif [ "$TIER_CHOICE" = "webservers" ]; then
+            PLAYBOOK_FILE="webservers.yml"
+          else
+            PLAYBOOK_FILE="site.yml"
+          fi
+
+          echo "inventory_path=inventories/$ENV_CHOICE/" >> $GITHUB_OUTPUT
+          echo "playbook_file=$PLAYBOOK_FILE" >> $GITHUB_OUTPUT
+
+      - name: Execute Targeted Ansible GitOps Playbook
+        run: |
+          ansible-playbook -i ${{ steps.parse-matrix.outputs.inventory_path }} ${{ steps.parse-matrix.outputs.playbook_file }} --vault-password-file .vault_pass.txt
+        env:
+          ANSIBLE_HOST_KEY_CHECKING: "False"

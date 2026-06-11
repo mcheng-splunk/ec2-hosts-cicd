@@ -1,0 +1,6 @@
+---
+- name: Configure Database Tier
+  hosts: db_machines
+  become: true
+  roles:
+    - otel_agent

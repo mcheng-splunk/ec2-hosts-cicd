@@ -1,0 +1,6 @@
+---
+- name: Configure OTel Collector Tier
+  hosts: otel_collector
+  become: true
+  roles:
+    - otel_collector

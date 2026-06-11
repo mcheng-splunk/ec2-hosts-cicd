@@ -1,0 +1,6 @@
+---
+- name: Configure Otel Collector Tier
+  hosts: haproxy_otel_lb
+  become: true
+  roles:
+    - haproxy_otel_lb

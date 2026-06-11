@@ -1,0 +1,6 @@
+---
+# OTel Collector specific variables
+otel_pkg_type: "rpm"
+
+# Final backend endpoint where otel_collectors export data
+otel_backend_endpoint: "jaeger-collector.otel-dev.svc.cluster.local:4317"

@@ -1,0 +1,85 @@
+---
+- name: Ensure python prerequisites are installed for check mode capability
+  ansible.builtin.raw: |
+    if command -v apt-get >/dev/null 2>&1; then
+      apt-get update && apt-get install -y python3-apt
+    elif command -v dnf >/dev/null 2>&1; then
+      dnf install -y python3-dnf
+    else
+      yum install -y python-dnf
+    fi
+  become: true
+  changed_when: false
+  check_mode: false  # Safe to leave on as it self-detects the OS engine now
+- name: Ensure target directories exist
+  ansible.builtin.file:
+    path: "{{ otel_config_dir }}"
+    state: directory
+    mode: '0755'
+
+- name: Check if local database secrets file exists on the remote server
+  ansible.builtin.stat:
+    path: /etc/otelcol-contrib/.env.json
+  register: db_secret_file
+  become: true
+
+# - name: Read remote database secrets file
+#   ansible.builtin.slurp:
+#     src: /etc/otelcol-contrib/.env.json
+#   register: remote_secret_payload
+#   when: db_secret_file.stat.exists
+#   become: true
+
+# - name: Parse remote secrets into playbook variables
+#   ansible.builtin.set_fact:
+#     # Decodes the base64 output from slurp and converts the JSON string into an Ansible dict
+#     db_password: "{{ (remote_secret_payload['content'] | b64decode | from_json).db_password }}"
+#   when: db_secret_file.stat.exists
+
+- name: Download OpenTelemetry Contrib Collector package
+  ansible.builtin.get_url:
+    url: "{{ otel_download_url }}"
+    dest: "/tmp/otelcol-contrib-{{ otel_version }}.{{ otel_pkg_type }}"
+    mode: '0644'
+    force: true  # <--- FORCE overwrite of any corrupted remnants in /tmp
+  become: true
+  register: download_result
+  failed_when: false
+  changed_when: false
+
+- name: Check if downloaded package exists
+  ansible.builtin.stat:
+    path: "/tmp/otelcol-contrib-{{ otel_version }}.{{ otel_pkg_type }}"
+  register: package_stat
+  when: download_result is succeeded or download_result is skipped
+
+- name: Install package on Debian/Ubuntu systems
+  ansible.builtin.apt:
+    deb: "/tmp/otelcol-contrib-{{ otel_version }}.deb"
+    state: present
+  when: otel_pkg_type == "deb" and package_stat.stat.exists
+  become: true
+
+- name: Install package on RHEL/Amazon Linux systems
+  ansible.builtin.dnf:
+    name: "/tmp/otelcol-contrib-{{ otel_version }}.rpm"
+    disable_gpg_check: true
+    state: present
+    allow_downgrade: true
+  when: otel_pkg_type == "rpm" and package_stat.stat.exists
+  become: true
+
+- name: Deploy OpenTelemetry Collector configuration
+  ansible.builtin.template:
+    src: config.yaml.j2
+    dest: "{{ otel_config_dir }}/{{ otel_config_file }}"
+    mode: '0644'
+  become: true
+  notify: Restart OTel Collector
+
+- name: Ensure OpenTelemetry Collector service is started and enabled
+  ansible.builtin.systemd:
+    name: otelcol-contrib
+    state: started
+    enabled: true
+  become: true

@@ -1,0 +1,11 @@
+---
+# Overrides specific to Dev Webservers if needed (e.g. RedHat/Amazon Linux)
+otel_pkg_type: "rpm"
+
+# Web-specific configurations
+otel_monitoring_target: "web-app"
+otel_log_path: "/var/log/nginx/access.log"
+otel_metrics_port: 8080
+
+# HAProxy Load Balancer Endpoint (used by otel_agent config)
+haproxy_endpoint: "{{ hostvars[groups['otel_lb'][0]]['ansible_host'] }}:4317"

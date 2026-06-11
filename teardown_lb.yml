@@ -1,0 +1,29 @@
+---
+- name: Tear down HAProxy Load Balancer
+  hosts: haproxy_otel_lb
+  become: true
+  tasks:
+    - name: Stop and disable HAProxy service
+      ansible.builtin.systemd:
+        name: haproxy
+        state: stopped
+        enabled: false
+
+    - name: Remove HAProxy package (Debian/Ubuntu)
+      ansible.builtin.apt:
+        name: haproxy
+        state: absent
+        purge: true
+      when: ansible_os_family == "Debian"
+
+    - name: Remove HAProxy package (RHEL/Amazon Linux)
+      ansible.builtin.dnf:
+        name: haproxy
+        state: absent
+      when: ansible_os_family == "RedHat"
+
+    - name: Remove HAProxy configuration directory
+      ansible.builtin.file:
+        path: /etc/haproxy
+        state: absent
+      ignore_errors: true

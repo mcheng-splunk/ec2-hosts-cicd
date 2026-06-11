@@ -1,0 +1,35 @@
+---
+- name: Tear down OpenTelemetry Collector
+  hosts: all
+  become: true
+  tasks:
+    - name: Stop and disable otelcol-contrib service
+      ansible.builtin.systemd:
+        name: otelcol-contrib
+        state: stopped
+        enabled: false
+
+    - name: Remove OpenTelemetry package (Debian/Ubuntu)
+      ansible.builtin.apt:
+        name: otelcol-contrib
+        state: absent
+        purge: true
+      when: otel_pkg_type == "deb"
+
+    - name: Remove OpenTelemetry package (RHEL/Amazon Linux)
+      ansible.builtin.dnf:
+        name: otelcol-contrib
+        state: absent
+      when: otel_pkg_type == "rpm"
+
+    - name: Remove OpenTelemetry configuration directory
+      ansible.builtin.file:
+        path: "{{ otel_config_dir }}"
+        state: absent
+      ignore_errors: true
+
+    - name: Remove OpenTelemetry temporary download files
+      ansible.builtin.file:
+        path: "/tmp/otelcol-contrib-{{ otel_version }}.{{ otel_pkg_type }}"
+        state: absent
+      ignore_errors: true

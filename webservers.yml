@@ -1,0 +1,6 @@
+---
+- name: Configure Webservers Tier
+  hosts: webservers
+  become: true
+  roles:
+    - otel_agent
