@@ -13,7 +13,10 @@ ec2-hosts/
 ├── db_machines.yml          # Playbook for database tier
 ├── otel_collector.yml       # Playbook for OTel collector tier
 ├── otel_lb.yml              # Playbook for HAProxy load balancer
-├── teardown.yml             # Playbook to remove OpenTelemetry Collector
+├── teardown_all.yml         # Playbook to remove all OTel components
+├── teardown_agents.yml      # Playbook to remove OTel Agent (webservers, db_machines)
+├── teardown_collectors.yml  # Playbook to remove OTel Collector
+├── teardown_lb.yml          # Playbook to remove HAProxy Load Balancer
 ├── ansible.cfg              # Ansible configuration (includes OTel callback plugin)
 ├── callback_plugins/        # Custom Ansible callback plugins
 │   └── opentelemetry_tracer.py
@@ -295,30 +298,36 @@ ansible-playbook -i inventories/dev/ site.yml --check --ask-vault-pass
 ansible-playbook -i inventories/dev/ otel_lb.yml --check --ask-vault-pass
 ```
 
-### Destroy/Teardown OpenTelemetry Collector
+### Destroy/Teardown OpenTelemetry Infrastructure
 
 ```bash
-# Remove OTel collector from all hosts in dev
-ansible-playbook -i inventories/dev/ teardown.yml --ask-vault-pass
+# Remove all OTel components from all hosts in dev
+ansible-playbook -i inventories/dev/ teardown_all.yml --ask-vault-pass
 
 # Remove from specific tier
-ansible-playbook -i inventories/dev/ teardown.yml --limit webservers --ask-vault-pass
-ansible-playbook -i inventories/dev/ teardown.yml --limit db_machines --ask-vault-pass
-ansible-playbook -i inventories/dev/ teardown.yml --limit otel_collectors --ask-vault-pass
-ansible-playbook -i inventories/dev/ teardown.yml --limit otel_lb --ask-vault-pass
+ansible-playbook -i inventories/dev/ teardown_agents.yml --ask-vault-pass
+ansible-playbook -i inventories/dev/ teardown_collectors.yml --ask-vault-pass
+ansible-playbook -i inventories/dev/ teardown_lb.yml --ask-vault-pass
+
+# Remove from specific tier in dev (using --limit)
+ansible-playbook -i inventories/dev/ teardown_agents.yml --limit webservers --ask-vault-pass
+ansible-playbook -i inventories/dev/ teardown_agents.yml --limit db_machines --ask-vault-pass
+ansible-playbook -i inventories/dev/ teardown_collectors.yml --limit otel_collector --ask-vault-pass
+ansible-playbook -i inventories/dev/ teardown_lb.yml --limit haproxy_otel_lb --ask-vault-pass
 
 # Remove from specific host (by name)
-ansible-playbook -i inventories/dev/ teardown.yml --limit dev-collector-01 --ask-vault-pass
+ansible-playbook -i inventories/dev/ teardown_agents.yml --limit dev-web-01 --ask-vault-pass
+ansible-playbook -i inventories/dev/ teardown_collectors.yml --limit dev-collector-01 --ask-vault-pass
 
 # Check mode - see what would be removed
-ansible-playbook -i inventories/dev/ teardown.yml --check --ask-vault-pass
+ansible-playbook -i inventories/dev/ teardown_all.yml --check --ask-vault-pass
 ```
 
-The teardown playbook will:
-1. Stop and disable the `otelcol-contrib` service
-2. Remove the OpenTelemetry package (apt/dnf)
-3. Delete the configuration directory (`/etc/otelcol-contrib`)
-4. Clean up temporary download files in `/tmp`
+**Teardown playbooks:**
+- `teardown_all.yml` - Removes all OTel components (imports all other teardown playbooks)
+- `teardown_agents.yml` - Stops/removes otelcol-contrib from webservers and db_machines
+- `teardown_collectors.yml` - Stops/removes otelcol-contrib from otel_collector hosts
+- `teardown_lb.yml` - Stops/removes HAProxy from haproxy_otel_lb hosts
 
 ### Deploy with Verbose Output
 
