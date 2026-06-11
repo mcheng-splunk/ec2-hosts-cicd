@@ -90,17 +90,17 @@ jobs:
           chmod 600 .vault_pass.txt
 
       # =================================================================
-      # FOLDER DETECTION APPROACH (Alternative to dropdown selection)
-      # Uncomment this block to enable automatic environment detection
-      # based on which folder (dev/test/prod) was modified in the git push.
+      # COMBINED ENVIRONMENT AND PLAYBOOK PARSING
+      # First detects via folder changes (parse-matrix), then applies
+      # dropdown selection if available (parse-dropbox-matrix logic)
       # =================================================================
-      - name: Parse Environment via Folder Detection
-        id: parse-matrix
+      - name: Parse Environment and Playbook Selections
+        id: parse-env-and-playbook
         run: |
-          # Get the list of changed files from the push event
+          # Step 1: Folder detection (parse-matrix logic)
           echo "Fetching changed files..."
           curl -s https://api.github.com/repos/${{ github.repository }}/commits/${{ github.sha }} | jq -r '.files[].filename' > /tmp/changed_files.txt 2>/dev/null || echo "" > /tmp/changed_files.txt
-      
+
           ENV_CHOICE="dev"  # default
           if grep -q "inventories/test" /tmp/changed_files.txt 2>/dev/null; then
             ENV_CHOICE="test"
@@ -114,7 +114,7 @@ jobs:
           else
             echo "No environment folder changes detected, defaulting to dev"
           fi
-      
+
           # Detect tier based on playbook file changes
           TIER_CHOICE="db_machines"  # default
           if grep -q "webservers.yml" /tmp/changed_files.txt 2>/dev/null; then
@@ -126,39 +126,34 @@ jobs:
           elif grep -q "site.yml" /tmp/changed_files.txt 2>/dev/null; then
             TIER_CHOICE="ALL"
           fi
-      
+
+          # Step 2: If workflow_dispatch, use dropdown selection (parse-dropbox-matrix logic)
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            ENV_CHOICE="${{ github.event.inputs.target_env }}"
+            TIER_CHOICE="${{ github.event.inputs.target_tier }}"
+            echo "Using workflow_dispatch selection: ENV=$ENV_CHOICE, TIER=$TIER_CHOICE"
+          else
+            echo "Automated git push hook triggered. Using detected values."
+          fi
+
+          # Determine playbook file
+          if [ "$TIER_CHOICE" = "db_machines" ]; then
+            PLAYBOOK_FILE="db_machines.yml"
+          elif [ "$TIER_CHOICE" = "webservers" ]; then
+            PLAYBOOK_FILE="webservers.yml"
+          elif [ "$TIER_CHOICE" = "otel_collector" ]; then
+            PLAYBOOK_FILE="otel_collector.yml"
+          elif [ "$TIER_CHOICE" = "haproxy_otel_lb" ]; then
+            PLAYBOOK_FILE="loadbalancer.yml"
+          else
+            PLAYBOOK_FILE="site.yml"
+          fi
+
           echo "inventory_path=inventories/$ENV_CHOICE/" >> $GITHUB_OUTPUT
-          echo "playbook_file=$TIER_CHOICE.yml" >> $GITHUB_OUTPUT
-
-      # =================================================================
-      # DROPDOWN SELECTION APPROACH (Default - Active)
-      # Keep this block active for manual environment selection via workflow_dispatch
-      # =================================================================
-      # - name: Parse Environment and Playbook Selections
-      #   id: parse-matrix
-      #   run: |
-      #     if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-      #       ENV_CHOICE="${{ github.event.inputs.target_env }}"
-      #       TIER_CHOICE="${{ github.event.inputs.target_tier }}"
-      #     else
-      #       ENV_CHOICE="dev"
-      #       TIER_CHOICE="db_machines"
-      #       echo "Automated git push hook triggered. Defaulting to DEV environment deployment."
-      #     fi
-
-      #     if [ "$TIER_CHOICE" = "db_machines" ]; then
-      #       PLAYBOOK_FILE="db_machines.yml"
-      #     elif [ "$TIER_CHOICE" = "webservers" ]; then
-      #       PLAYBOOK_FILE="webservers.yml"
-      #     else
-      #       PLAYBOOK_FILE="site.yml"
-      #     fi
-
-      #     echo "inventory_path=inventories/$ENV_CHOICE/" >> $GITHUB_OUTPUT
-      #     echo "playbook_file=$PLAYBOOK_FILE" >> $GITHUB_OUTPUT
+          echo "playbook_file=$PLAYBOOK_FILE" >> $GITHUB_OUTPUT
 
       - name: Execute Targeted Ansible GitOps Playbook
         run: |
-          ansible-playbook -i ${{ steps.parse-matrix.outputs.inventory_path }} ${{ steps.parse-matrix.outputs.playbook_file }} --vault-password-file .vault_pass.txt
+          ansible-playbook -i ${{ steps.parse-env-and-playbook.outputs.inventory_path }} ${{ steps.parse-env-and-playbook.outputs.playbook_file }} --vault-password-file .vault_pass.txt
         env:
           ANSIBLE_HOST_KEY_CHECKING: "False"
