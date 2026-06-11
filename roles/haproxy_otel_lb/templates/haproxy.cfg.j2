@@ -19,6 +19,6 @@ backend otel_collectors
     
 
     # Swapped health checks to port 4317 to avoid noisy logs on the collectors
-    {% for host in groups['otel_collectors'] %}
+    {% for host in groups['otel_collector'] %}
     server {{ host }} {{ hostvars[host]['ansible_host'] }}:4317 check port 13133
     {% endfor %}
