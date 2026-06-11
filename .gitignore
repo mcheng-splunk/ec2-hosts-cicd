@@ -1,3 +1,5 @@
 # Ignore general OS overhead artifacts
 .DS_Store
 *.retry
+.claude*
+

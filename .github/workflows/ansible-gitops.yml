@@ -134,28 +134,28 @@ jobs:
       # DROPDOWN SELECTION APPROACH (Default - Active)
       # Keep this block active for manual environment selection via workflow_dispatch
       # =================================================================
-      - name: Parse Environment and Playbook Selections
-        id: parse-matrix
-        run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            ENV_CHOICE="${{ github.event.inputs.target_env }}"
-            TIER_CHOICE="${{ github.event.inputs.target_tier }}"
-          else
-            ENV_CHOICE="dev"
-            TIER_CHOICE="db_machines"
-            echo "Automated git push hook triggered. Defaulting to DEV environment deployment."
-          fi
+      # - name: Parse Environment and Playbook Selections
+      #   id: parse-matrix
+      #   run: |
+      #     if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+      #       ENV_CHOICE="${{ github.event.inputs.target_env }}"
+      #       TIER_CHOICE="${{ github.event.inputs.target_tier }}"
+      #     else
+      #       ENV_CHOICE="dev"
+      #       TIER_CHOICE="db_machines"
+      #       echo "Automated git push hook triggered. Defaulting to DEV environment deployment."
+      #     fi
 
-          if [ "$TIER_CHOICE" = "db_machines" ]; then
-            PLAYBOOK_FILE="db_machines.yml"
-          elif [ "$TIER_CHOICE" = "webservers" ]; then
-            PLAYBOOK_FILE="webservers.yml"
-          else
-            PLAYBOOK_FILE="site.yml"
-          fi
+      #     if [ "$TIER_CHOICE" = "db_machines" ]; then
+      #       PLAYBOOK_FILE="db_machines.yml"
+      #     elif [ "$TIER_CHOICE" = "webservers" ]; then
+      #       PLAYBOOK_FILE="webservers.yml"
+      #     else
+      #       PLAYBOOK_FILE="site.yml"
+      #     fi
 
-          echo "inventory_path=inventories/$ENV_CHOICE/" >> $GITHUB_OUTPUT
-          echo "playbook_file=$PLAYBOOK_FILE" >> $GITHUB_OUTPUT
+      #     echo "inventory_path=inventories/$ENV_CHOICE/" >> $GITHUB_OUTPUT
+      #     echo "playbook_file=$PLAYBOOK_FILE" >> $GITHUB_OUTPUT
 
       - name: Execute Targeted Ansible GitOps Playbook
         run: |
